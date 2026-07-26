@@ -1,0 +1,77 @@
+/*
+ * AUTO-GENERATED FROM packages/config/design-tokens.ts
+ * Do not edit by hand. Run `npm run gen:themes` to regenerate.
+ *
+ * To change a token value, edit `design-tokens.ts` and re-run the generator.
+ */
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --background: 240 6% 7%;
+    --foreground: 30 10% 92%;
+    --card: 240 5% 10%;
+    --card-foreground: 30 10% 92%;
+    --popover: 240 5% 10%;
+    --popover-foreground: 30 10% 92%;
+    --primary: 0 55% 42%;
+    --primary-foreground: 30 20% 96%;
+    --secondary: 240 4% 15%;
+    --secondary-foreground: 30 10% 80%;
+    --muted: 240 4% 15%;
+    --muted-foreground: 30 8% 50%;
+    --accent: 40 55% 60%;
+    --accent-foreground: 240 6% 7%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 40 55% 60%;
+    --gold: 40 55% 60%;
+    --gold-foreground: 240 6% 7%;
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --sidebar-background: 240 6% 8%;
+    --sidebar-foreground: 30 10% 80%;
+    --sidebar-primary: 0 55% 42%;
+    --sidebar-primary-foreground: 30 20% 96%;
+    --sidebar-accent: 240 4% 14%;
+    --sidebar-accent-foreground: 30 10% 80%;
+    --sidebar-border: 240 4% 14%;
+    --sidebar-ring: 40 55% 60%;
+  }
+
+  .dark {
+    --background: 240 6% 7%;
+    --foreground: 30 10% 92%;
+    --card: 240 5% 10%;
+    --card-foreground: 30 10% 92%;
+    --popover: 240 5% 10%;
+    --popover-foreground: 30 10% 92%;
+    --primary: 0 55% 42%;
+    --primary-foreground: 30 20% 96%;
+    --secondary: 240 4% 15%;
+    --secondary-foreground: 30 10% 80%;
+    --muted: 240 4% 15%;
+    --muted-foreground: 30 8% 50%;
+    --accent: 40 55% 60%;
+    --accent-foreground: 240 6% 7%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 40 55% 60%;
+    --gold: 40 55% 60%;
+    --gold-foreground: 240 6% 7%;
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --sidebar-background: 240 6% 8%;
+    --sidebar-foreground: 30 10% 80%;
+    --sidebar-primary: 0 55% 42%;
+    --sidebar-primary-foreground: 30 20% 96%;
+    --sidebar-accent: 240 4% 14%;
+    --sidebar-accent-foreground: 30 10% 80%;
+    --sidebar-border: 240 4% 14%;
+    --sidebar-ring: 40 55% 60%;
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "app": {
+    "name": "Kshuri Salon",
+    "subtitle": "Run your salon"
+  },
+  "auth": {
+    "sign_in": "Sign in",
+    "phone": "Phone number",
+    "otp": "Enter OTP",
+    "submit": "Continue",
+    "submitting": "Sending…"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalid_phone": "Enter a valid phone number",
+    "invalid_otp": "Enter the 6-digit code"
+  }
+}

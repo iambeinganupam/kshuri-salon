@@ -1,0 +1,128 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Bun lockfiles — this project standardises on npm (see CLAUDE.md).
+# Bun lockfiles silently appear when contributors run `bun install`; keeping
+# them out of VCS prevents npm/bun dependency-resolution drift in CI.
+bun.lock
+bun.lockb
+
+# ─── Build outputs ───────────────────────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+.output/
+.turbo/
+*.tsbuildinfo
+# Vite dev-server timestamp files (regenerated on every config touch)
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
+
+# ─── Mobile build artifacts (apps-mobile/*) ──────────────────────────────────
+# Per-app .gitignore files cover node_modules, .expo/, ios/, android/.
+# These are the binary outputs that can land at any path under apps-mobile/.
+*.ipa
+*.apk
+*.aab
+.expo/
+.expo-shared/
+# Metro bundler cache + health-check artifacts
+.metro-health-check*
+metro-cache/
+
+# ─── Environment — NEVER commit real env files ───────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+.env.test.local
+
+# ─── Business / non-code documents ───────────────────────────────────────────
+# `prd/` was reorganized into `docs/product/` (kept under VCS).
+# The blanket binary-file rules below would re-ignore everything under
+# `docs/product/`; negate-ignore that path so future PRDs stay tracked.
+prd/
+slides/
+*.pdf
+*.pptx
+*.key
+*.xlsx
+!docs/product/
+!docs/product/**
+
+# ─── IDE & OS ─────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Tool caches ──────────────────────────────────────────────────────────────
+.superpowers/
+.vercel/
+coverage/
+.nyc_output/
+.vitest-cache/
+playwright-report/
+test-results/
+
+# ─── Local-only / session artifacts ──────────────────────────────────────────
+# Screenshots, logs and plans created by AI assistants and Playwright runs.
+# Kept out of git so the repo doesn't bloat with throwaway test outputs.
+.playwright-mcp/
+.backup/
+.assistance/
+.assistant/
+.claude/worktrees/
+.claude/projects/
+# Ad-hoc planning artifacts at the repo root
+/implementation_plan.md
+/walkthrough.md
+/task.md
+# Root-level PNG / JPG screenshots from local smoke tests
+/*.png
+/*.jpg
+/*.jpeg
+# Loose root-level scratch files & raw page dumps
+/salon*.md
+/scratch.js
+/scratch.*
+/session/
+/graphify-out/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# ─── Upload / media (local dev only) ─────────────────────────────────────────
+backend/uploads/
+
+# ─── Secrets / credentials ───────────────────────────────────────────────────
+*.pem
+*.key
+secrets/
+
+# SciTE / Scintilla SideKick local cache files
+*.sdr/
+*.lua.old
+
+# Claude Code per-developer config — never commit. Contains local Bash
+# allowlist entries that often include test JWTs, dev tokens, etc.
+.claude/settings.json
+.claude/settings.local.json

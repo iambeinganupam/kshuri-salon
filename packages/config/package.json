@@ -1,0 +1,23 @@
+{
+  "name": "@barber/config",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./design-tokens.ts",
+  "types": "./design-tokens.ts",
+  "exports": {
+    ".": "./design-tokens.ts",
+    "./tailwind-preset": "./tailwind-preset.ts",
+    "./tailwind-preset.native": "./tailwind-preset.native.ts",
+    "./design-tokens": "./design-tokens.ts",
+    "./themes/*.css": "./themes/*.css",
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "scripts": {
+    "gen:themes": "tsx scripts/generate-themes.ts",
+    "check:themes": "tsx scripts/generate-themes.ts --check"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  },
+  "dependencies": {}
+}

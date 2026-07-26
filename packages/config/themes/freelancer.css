@@ -1,0 +1,85 @@
+/*
+ * AUTO-GENERATED FROM packages/config/design-tokens.ts
+ * Do not edit by hand. Run `npm run gen:themes` to regenerate.
+ *
+ * To change a token value, edit `design-tokens.ts` and re-run the generator.
+ */
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --background: 30 15% 97%;
+    --foreground: 20 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 25% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 25% 10%;
+    --primary: 348 83% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 20% 94%;
+    --secondary-foreground: 20 20% 22%;
+    --muted: 30 12% 93%;
+    --muted-foreground: 20 8% 46%;
+    --accent: 36 100% 50%;
+    --accent-foreground: 20 25% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 12% 89%;
+    --input: 30 12% 86%;
+    --ring: 348 83% 42%;
+    --gold: 36 100% 50%;
+    --gold-foreground: 20 25% 10%;
+    --success: 152 69% 36%;
+    --success-foreground: 0 0% 100%;
+    --sidebar-background: 20 18% 99%;
+    --sidebar-foreground: 20 20% 22%;
+    --sidebar-primary: 348 83% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 18% 95%;
+    --sidebar-accent-foreground: 20 25% 12%;
+    --sidebar-border: 30 12% 91%;
+    --sidebar-ring: 348 83% 42%;
+    --info: 215 70% 55%;
+    --info-foreground: 0 0% 100%;
+    --warning: 36 90% 50%;
+    --warning-foreground: 20 25% 10%;
+  }
+
+  .dark {
+    --background: 222 22% 6%;
+    --foreground: 210 15% 92%;
+    --card: 222 18% 9%;
+    --card-foreground: 210 15% 92%;
+    --popover: 222 18% 9%;
+    --popover-foreground: 210 15% 92%;
+    --primary: 348 75% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 14% 14%;
+    --secondary-foreground: 210 12% 78%;
+    --muted: 222 12% 12%;
+    --muted-foreground: 215 10% 48%;
+    --accent: 36 90% 50%;
+    --accent-foreground: 20 25% 10%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 14% 15%;
+    --input: 222 14% 17%;
+    --ring: 348 75% 55%;
+    --gold: 36 90% 50%;
+    --gold-foreground: 20 25% 10%;
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --sidebar-background: 222 22% 7%;
+    --sidebar-foreground: 210 12% 82%;
+    --sidebar-primary: 348 75% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 16% 12%;
+    --sidebar-accent-foreground: 210 12% 82%;
+    --sidebar-border: 222 14% 13%;
+    --sidebar-ring: 348 75% 55%;
+    --info: 215 65% 58%;
+    --info-foreground: 0 0% 100%;
+    --warning: 36 85% 52%;
+    --warning-foreground: 20 25% 10%;
+  }
+}
