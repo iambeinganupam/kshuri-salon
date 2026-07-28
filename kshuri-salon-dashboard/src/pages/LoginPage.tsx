@@ -18,21 +18,24 @@
 //                                          OTP round-trip).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FadeIn } from "@kshuri/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Phone, ArrowRight, Sparkles, Building2, Star, Shield, ShieldAlert } from "lucide-react";
+import { Phone, Mail, ArrowRight, Sparkles, Building2, Star, Shield, ShieldAlert } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import {
   useVerifyFirebaseToken,
   isRoleMismatchError,
   isPhoneNotRegisteredError,
+  isEmailNotRegisteredError,
 } from "@kshuri/api-client";
 import { toast } from "sonner";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useFirebasePhoneAuth } from "@/hooks/useFirebasePhoneAuth";
+import { useEmailOtpAuth } from "@/hooks/useFirebaseEmailAuth";
+import { auth } from "@/lib/firebase";
 
 // Wording the user requested: never reveal the actual role of the account
 // (no cross-pollination between dashboards). The vendor portal is its own
@@ -50,6 +53,8 @@ export default function LoginPage() {
   const [roleMismatch, setRoleMismatch] = useState(false);
 
   const [phone, setPhone] = useState("");
+  const [emailUser, setEmailUser] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"phone" | "email">("phone");
   const [otpCode, setOtpCode] = useState("");
   // We keep the just-verified idToken so the role-mismatch "Create account"
   // CTA can hand it off to /signup — signup then skips its own Step 1 instead
@@ -70,8 +75,79 @@ export default function LoginPage() {
     isLoading: isPhoneAuthLoading,
   } = useFirebasePhoneAuth({ containerId: "recaptcha-container" });
 
+  const {
+    requestEmailOtp,
+    verifyEmailOtpCode,
+    reset: resetEmail,
+    otpSent: emailOtpSent,
+    isLoading: isEmailAuthLoading,
+  } = useEmailOtpAuth();
+
   const PHONE_RE = /^[6-9]\d{9}$/;
   const phoneValid = PHONE_RE.test(phone);
+
+  // (Note: handleEmailLinkVerification removed as it's an OTP flow now)
+
+  async function handleRequestEmailOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!emailUser || !emailUser.includes("@")) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    const result = await requestEmailOtp(emailUser);
+    if (result.success) {
+      toast.success("OTP sent! Please check your email.");
+    } else {
+      toast.error("Failed to send login OTP. Please try again.");
+    }
+  }
+
+  async function handleVerifyEmailOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!otpCode || otpCode.length !== 6) {
+      toast.error("Please enter the 6-digit OTP");
+      return;
+    }
+
+    setIsLoading(true);
+    setRoleMismatch(false);
+    try {
+      const verifyResult = await verifyEmailOtpCode(emailUser, otpCode);
+      if (!verifyResult.success || !verifyResult.result) {
+        if (verifyResult.error) {
+          throw verifyResult.error;
+        }
+        toast.error("Invalid OTP. Please try again.");
+        return;
+      }
+
+      const authResult = verifyResult.result;
+
+      setVerifiedIdToken(""); // We don't have idToken for email OTP logic currently, signup flow needs to be updated if email signup is intended via this route
+
+      setAuthUser(authResult.user, authResult.access_token);
+      toast.success("Welcome back!");
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      if (isEmailNotRegisteredError(err) || isPhoneNotRegisteredError(err)) {
+        toast.success("Email verified — let's finish setting up your outlet.");
+        navigate("/signup", {
+          state: {
+            email: emailUser,
+          },
+        });
+        return;
+      }
+      if (isRoleMismatchError(err)) {
+        setRoleMismatch(true);
+        return;
+      }
+      console.error("Email OTP Verify Error:", err);
+      toast.error("Login failed after OTP verification.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -234,10 +310,10 @@ export default function LoginPage() {
                           navigate("/signup", {
                             state: verifiedIdToken
                               ? {
-                                  phone,
-                                  idToken: verifiedIdToken,
-                                  idTokenIssuedAt: verifiedIdTokenAt,
-                                }
+                                phone,
+                                idToken: verifiedIdToken,
+                                idTokenIssuedAt: verifiedIdTokenAt,
+                              }
                               : undefined,
                           });
                         }}
@@ -265,90 +341,185 @@ export default function LoginPage() {
           )}
 
           <FadeIn delay={0.1}>
+            <div className="flex bg-muted/50 p-1 rounded-xl mb-6">
+              <button
+                type="button"
+                onClick={() => setLoginMethod("phone")}
+                className={`flex-1 text-sm font-semibold rounded-lg py-2 transition-all ${loginMethod === "phone" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+              >
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod("email")}
+                className={`flex-1 text-sm font-semibold rounded-lg py-2 transition-all ${loginMethod === "email" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+              >
+                Email
+              </button>
+            </div>
+
             <div id="recaptcha-container" />
-            {!otpSent ? (
-              <form onSubmit={handleSendOtp} className="space-y-5">
-                <div>
-                  <label className="text-[13px] font-semibold text-foreground mb-2.5 block">Phone Number</label>
-                  <div className="flex items-stretch gap-2">
-                    <div
-                      aria-hidden
-                      className="grid h-12 place-items-center rounded-xl border border-border/50 bg-muted/50 px-3 text-sm font-medium text-muted-foreground"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Phone className="h-4 w-4 text-muted-foreground/70" /> +91
-                      </span>
+
+            {loginMethod === "phone" && (
+              !otpSent ? (
+                <form onSubmit={handleSendOtp} className="space-y-5">
+                  <div>
+                    <label className="text-[13px] font-semibold text-foreground mb-2.5 block">Phone Number</label>
+                    <div className="flex items-stretch gap-2">
+                      <div
+                        aria-hidden
+                        className="grid h-12 place-items-center rounded-xl border border-border/50 bg-muted/50 px-3 text-sm font-medium text-muted-foreground"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Phone className="h-4 w-4 text-muted-foreground/70" /> +91
+                        </span>
+                      </div>
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        maxLength={10}
+                        placeholder="98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        className="h-12 flex-1 rounded-xl bg-muted/30 border-border/50 tracking-wider"
+                      />
                     </div>
-                    <Input
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      maxLength={10}
-                      placeholder="98765 43210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      className="h-12 flex-1 rounded-xl bg-muted/30 border-border/50 tracking-wider"
-                    />
+                    <p
+                      className={`mt-1.5 text-xs ${phone.length > 0 && !phoneValid ? "text-destructive" : "text-muted-foreground"
+                        }`}
+                    >
+                      {phone.length > 0 && !phoneValid
+                        ? "Enter a 10-digit Indian mobile starting with 6, 7, 8, or 9."
+                        : "10-digit mobile, no spaces."}
+                    </p>
                   </div>
-                  <p
-                    className={`mt-1.5 text-xs ${
-                      phone.length > 0 && !phoneValid ? "text-destructive" : "text-muted-foreground"
-                    }`}
+                  <Button
+                    type="submit"
+                    disabled={isPhoneAuthLoading || !phoneValid}
+                    className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                   >
-                    {phone.length > 0 && !phoneValid
-                      ? "Enter a 10-digit Indian mobile starting with 6, 7, 8, or 9."
-                      : "10-digit mobile, no spaces."}
-                  </p>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isPhoneAuthLoading || !phoneValid}
-                  className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                >
-                  {isPhoneAuthLoading ? "Sending…" : "Send OTP"} <ArrowRight className="h-4 w-4" />
-                </Button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-5">
-                <div>
-                  <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
-                    Enter 6-digit OTP
-                  </label>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Code sent to <span className="font-medium text-foreground">+91 {phone}</span>
-                  </p>
-                  <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} className="gap-2">
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isPhoneAuthLoading || isLoading || otpCode.length !== 6}
-                  className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                >
-                  {isPhoneAuthLoading || isLoading ? "Verifying…" : "Verify OTP"} <ArrowRight className="h-4 w-4" />
-                </Button>
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      reset();
-                      setOtpCode("");
-                      setRoleMismatch(false);
-                    }}
-                    className="text-xs text-accent hover:underline font-medium"
+                    {isPhoneAuthLoading ? "Sending…" : "Send OTP"} <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-5">
+                  <div>
+                    <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                      Enter 6-digit OTP
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Code sent to <span className="font-medium text-foreground">+91 {phone}</span>
+                    </p>
+                    <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} className="gap-2">
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isPhoneAuthLoading || isLoading || otpCode.length !== 6}
+                    className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                   >
-                    Use a different number
-                  </button>
-                </div>
-              </form>
+                    {isPhoneAuthLoading || isLoading ? "Verifying…" : "Verify OTP"} <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        reset();
+                        setOtpCode("");
+                        setRoleMismatch(false);
+                      }}
+                      className="text-xs text-accent hover:underline font-medium"
+                    >
+                      Use a different number
+                    </button>
+                  </div>
+                </form>
+              )
+            )}
+
+            {loginMethod === "email" && (
+              !emailOtpSent ? (
+                <form onSubmit={handleRequestEmailOtp} className="space-y-5">
+                  <div>
+                    <label className="text-[13px] font-semibold text-foreground mb-2.5 block">Email Address</label>
+                    <div className="flex items-stretch gap-2">
+                      <div
+                        aria-hidden
+                        className="grid h-12 place-items-center rounded-xl border border-border/50 bg-muted/50 px-3 text-sm font-medium text-muted-foreground"
+                      >
+                        <Mail className="h-4 w-4 text-muted-foreground/70" />
+                      </div>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        placeholder="hello@example.com"
+                        value={emailUser}
+                        onChange={(e) => setEmailUser(e.target.value)}
+                        className="h-12 flex-1 rounded-xl bg-muted/30 border-border/50"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isEmailAuthLoading || !emailUser.includes("@")}
+                    className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                  >
+                    {isEmailAuthLoading ? "Sending…" : "Send OTP"} <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyEmailOtp} className="space-y-5">
+                  <div>
+                    <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                      Enter 6-digit OTP
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Code sent to <span className="font-medium text-foreground">{emailUser}</span>
+                    </p>
+                    <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} className="gap-2">
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isEmailAuthLoading || isLoading || otpCode.length !== 6}
+                    className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                  >
+                    {isEmailAuthLoading || isLoading ? "Verifying…" : "Verify OTP"} <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetEmail();
+                        setOtpCode("");
+                        setRoleMismatch(false);
+                      }}
+                      className="text-xs text-accent hover:underline font-medium"
+                    >
+                      Use a different email
+                    </button>
+                  </div>
+                </form>
+              )
             )}
           </FadeIn>
 

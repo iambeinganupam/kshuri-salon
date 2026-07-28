@@ -14,9 +14,11 @@ import { useAuth } from "@/lib/auth-context";
 import {
   useVerifyFirebaseToken,
   isPhoneNotRegisteredError,
+  isEmailNotRegisteredError,
   isRoleMismatchError,
 } from "@kshuri/api-client";
 import { useFirebasePhoneAuth } from "@/hooks/useFirebasePhoneAuth";
+import { useEmailOtpAuth } from "@/hooks/useFirebaseEmailAuth";
 
 // ── Resume-signup draft (localStorage) ────────────────────────────────────────
 // Firebase phone-OTP ID tokens expire after ~60 min, so we cap drafts at 50 min
@@ -34,9 +36,11 @@ const DRAFT_KEY_PREFIX = "kshuri:salon-signup-draft:";
 const DRAFT_TTL_MS = 50 * 60 * 1000;
 type OutletTypeValue = "unisex" | "male" | "female" | "";
 type SignupDraft = {
+  authMethod?: "phone" | "email";
   phone: string;
   idToken: string;
   idTokenIssuedAt: number;
+  otpCode?: string;
   step: number;
   fullName: string;
   email: string;
@@ -57,8 +61,8 @@ function normalizeOutletTypeForApi(
   if (value === "female") return "women";
   return "unisex";
 }
-function draftKeyFor(phone: string) {
-  return DRAFT_KEY_PREFIX + phone.replace(/\D/g, "");
+function draftKeyFor(contact: string) {
+  return DRAFT_KEY_PREFIX + contact.replace(/\D/g, "");
 }
 function readFreshestDraft(): SignupDraft | null {
   try {
@@ -123,6 +127,9 @@ export default function SignupPage() {
   // Form State
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
+  const [emailUser, setEmailUser] = useState("");
+  const [authMethod, setAuthMethod] = useState<"phone" | "email">("phone");
+  const [authDraftSaved, setAuthDraftSaved] = useState(false);
   const [email, setEmail] = useState(prefillEmail);
   const [businessName, setBusinessName] = useState("");
   const [address, setAddress] = useState("");
@@ -131,7 +138,6 @@ export default function SignupPage() {
   const [outletType, setOutletType] = useState<OutletTypeValue>("");
   const [gstin, setGstin] = useState("");
   const [tradeLicense, setTradeLicense] = useState("");
-
   const [otpCode, setOtpCode] = useState("");
   const [idToken, setIdToken] = useState("");
   const [idTokenIssuedAt, setIdTokenIssuedAt] = useState(0);
@@ -139,15 +145,31 @@ export default function SignupPage() {
 
   // ── On mount: honor an OTP-handoff from LoginPage first, then fall back
   // to any saved signup draft. The handoff lets a user who just verified
-  // their phone on /login skip Step 1 here — they shouldn't have to
-  // re-verify the same number seconds later.
+  // their phone or email on /login skip Step 1 here — they shouldn't have to
+  // re-verify the same info seconds later.
   useEffect(() => {
     const handoff = location.state as {
+      authMethod?: "phone" | "email";
       phone?: string;
+      email?: string;
       idToken?: string;
+      otpCode?: string;
       idTokenIssuedAt?: number;
     } | null;
     const HANDOFF_TTL = 50 * 60 * 1000;
+
+    if (handoff?.email && handoff?.otpCode) {
+      setAuthMethod("email");
+      setEmailUser(handoff.email);
+      setEmail(handoff.email);
+      setOtpCode(handoff.otpCode);
+      setIdTokenIssuedAt(Date.now());
+      setStep(2);
+      toast.success("Email already verified — let's finish your details.");
+      window.history.replaceState({}, "");
+      return;
+    }
+
     if (
       handoff?.idToken &&
       handoff.phone &&
@@ -171,14 +193,20 @@ export default function SignupPage() {
 
     const draft = readFreshestDraft();
     if (!draft) return;
-    // Normalise legacy drafts that may have stored phone in E.164 (+91…) form.
-    setPhone(
-      draft.phone
-        .replace(/^\+?91/, "")
-        .replace(/\D/g, "")
-        .slice(0, 10),
-    );
-    setIdToken(draft.idToken);
+    if (draft.authMethod === "email") {
+      setAuthMethod("email");
+      setEmailUser(draft.email);
+      setOtpCode(draft.otpCode || "");
+    } else {
+      setPhone(
+        draft.phone
+          .replace(/^\+?91/, "")
+          .replace(/\D/g, "")
+          .slice(0, 10),
+      );
+      setIdToken(draft.idToken);
+    }
+
     setIdTokenIssuedAt(draft.idTokenIssuedAt);
     setFullName(draft.fullName);
     setEmail(draft.email);
@@ -198,10 +226,12 @@ export default function SignupPage() {
 
   // ── Persist the draft on any field change once OTP has been verified ──
   useEffect(() => {
-    if (!idToken || !phone) return;
+    if (!idTokenIssuedAt) return; // Means no verified auth yet
     const draft: SignupDraft = {
+      authMethod,
       phone,
       idToken,
+      otpCode,
       idTokenIssuedAt,
       step,
       fullName,
@@ -214,8 +244,10 @@ export default function SignupPage() {
       gstin,
       tradeLicense,
     };
+    const contactKey = authMethod === "email" ? emailUser : phone;
+    if (!contactKey) return;
     try {
-      localStorage.setItem(draftKeyFor(phone), JSON.stringify(draft));
+      localStorage.setItem(draftKeyFor(contactKey), JSON.stringify(draft));
     } catch {
       /* quota or disabled — best effort */
     }
@@ -244,6 +276,14 @@ export default function SignupPage() {
     otpSent,
     isLoading: isPhoneAuthLoading,
   } = useFirebasePhoneAuth({ containerId: "signup-recaptcha-container" });
+
+  const {
+    requestEmailOtp,
+    verifyEmailOtpCode,
+    reset: resetEmail,
+    otpSent: emailOtpSent,
+    isLoading: isEmailAuthLoading,
+  } = useEmailOtpAuth();
 
   const nextStep = () => {
     if (step < TOTAL_STEPS) setStep(step + 1);
@@ -342,6 +382,64 @@ export default function SignupPage() {
     }
   }
 
+  async function handleSendEmailOtp() {
+    if (!emailUser || !EMAIL_RE.test(emailUser)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    const result = await requestEmailOtp(emailUser);
+    if (result.success) {
+      toast.success("OTP sent! Please check your email.");
+    } else {
+      toast.error("Failed to send verification OTP. Please try again.");
+    }
+  }
+
+  async function handleVerifyEmailOtp() {
+    if (!otpCode || otpCode.length !== 6) {
+      toast.error("Please enter the 6-digit OTP");
+      return;
+    }
+    try {
+      const verifyResult = await verifyEmailOtpCode(emailUser, otpCode, {
+        role: "business_admin",
+        lookup_only: true, // we just want to prove it's valid and if they exist
+      });
+
+      if (!verifyResult.success || !verifyResult.result) {
+        if (verifyResult.error) {
+          throw verifyResult.error;
+        }
+        toast.error("Invalid OTP. Please try again.");
+        return;
+      }
+
+      setAuthUser(verifyResult.result.user, verifyResult.result.access_token);
+      try {
+        localStorage.removeItem(draftKeyFor(emailUser));
+      } catch { /* best effort */ }
+
+      toast.success("You already have an Outlet Manager account — welcome back!");
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      if (isEmailNotRegisteredError(err)) {
+        setIdTokenIssuedAt(Date.now());
+        setEmail(emailUser);
+        toast.success("Email verified successfully!");
+        nextStep();
+        return;
+      }
+      if (isRoleMismatchError(err)) {
+        toast.error("This email is registered with another role. Please sign in from the right dashboard.");
+        navigate("/", { state: { emailUser } });
+        return;
+      }
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })
+        ?.response?.data?.error?.message ?? "Couldn't verify your account. Please try again.";
+      toast.error(msg);
+    }
+  }
+
   async function handleFinalSubmit() {
     if (!businessName || !fullName)
       return toast.error("Please fill required fields");
@@ -351,21 +449,49 @@ export default function SignupPage() {
       const firstName = parts[0];
       const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
 
-      const authResult = await verifyFirebaseTokenMutation.mutateAsync({
-        id_token: idToken,
-        role: "business_admin",
-        first_name: firstName,
-        last_name: lastName,
-        email: email || undefined,
-        legal_business_name: businessName,
-        address_line1: address || undefined,
-        city: city || undefined,
-        postal_code: pincode || undefined,
-        outlet_type: normalizeOutletTypeForApi(outletType),
-        gstin: gstin || undefined,
-        trade_license: tradeLicense || undefined,
-        is_signup: true,
-      });
+      let authResult;
+
+      if (authMethod === "email") {
+        const result = await verifyEmailOtpCode(emailUser, otpCode, {
+          role: "business_admin",
+          first_name: firstName,
+          last_name: lastName,
+          legal_business_name: businessName,
+          address_line1: address || undefined,
+          city: city || undefined,
+          postal_code: pincode || undefined,
+          outlet_type: normalizeOutletTypeForApi(outletType),
+          gstin: gstin || undefined,
+          trade_license: tradeLicense || undefined,
+          is_signup: true,
+        });
+
+        if (!result.success || !result.result) {
+          if (result.error) {
+            throw result.error;
+          }
+          toast.error("Verification failed during signup.");
+          setIsLoading(false);
+          return;
+        }
+        authResult = result.result;
+      } else {
+        authResult = await verifyFirebaseTokenMutation.mutateAsync({
+          id_token: idToken,
+          role: "business_admin",
+          first_name: firstName,
+          last_name: lastName,
+          email: email || undefined,
+          legal_business_name: businessName,
+          address_line1: address || undefined,
+          city: city || undefined,
+          postal_code: pincode || undefined,
+          outlet_type: normalizeOutletTypeForApi(outletType),
+          gstin: gstin || undefined,
+          trade_license: tradeLicense || undefined,
+          is_signup: true,
+        });
+      }
 
       setAuthUser(authResult.user, authResult.access_token);
       // Signup succeeded — discard the draft so a future user on this browser
@@ -388,7 +514,7 @@ export default function SignupPage() {
       if (code === "AUTH_PHONE_EXISTS") {
         const existingRole = (
           apiErr?.response?.data?.error as
-            { details?: Record<string, unknown> } | undefined
+          { details?: Record<string, unknown> } | undefined
         )?.details?.existing_role as string | undefined;
         const ROLE_LABEL: Record<string, string> = {
           customer: "Customer",
@@ -480,103 +606,206 @@ export default function SignupPage() {
           <FadeIn delay={0.15} key={step}>
             {step === 1 && (
               <div className="space-y-5">
+                <div className="flex bg-muted/30 p-1 rounded-xl relative z-10 border border-border/50">
+                  <button
+                    onClick={() => setAuthMethod("phone")}
+                    className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all 
+                                  ${authMethod === "phone" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Phone
+                  </button>
+                  <button
+                    onClick={() => setAuthMethod("email")}
+                    className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all 
+                                  ${authMethod === "email" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Email
+                  </button>
+                </div>
+
                 <div id="signup-recaptcha-container"></div>
-                {!otpSent ? (
+
+                {authMethod === "phone" && (
                   <>
-                    <div>
-                      <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
-                        Phone Number <span className="text-accent">*</span>
-                      </label>
-                      <div className="flex items-stretch gap-2">
-                        <div
-                          aria-hidden
-                          className="grid h-12 place-items-center rounded-xl border border-border/50 bg-muted/50 px-3 text-sm font-medium text-muted-foreground"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <Phone className="h-4 w-4 text-muted-foreground/70" />{" "}
-                            +91
-                          </span>
+                    {!otpSent ? (
+                      <>
+                        <div>
+                          <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                            Phone Number <span className="text-accent">*</span>
+                          </label>
+                          <div className="flex items-stretch gap-2">
+                            <div
+                              aria-hidden
+                              className="grid h-12 place-items-center rounded-xl border border-border/50 bg-muted/50 px-3 text-sm font-medium text-muted-foreground"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <Phone className="h-4 w-4 text-muted-foreground/70" />{" "}
+                                +91
+                              </span>
+                            </div>
+                            <Input
+                              type="tel"
+                              inputMode="numeric"
+                              autoComplete="tel-national"
+                              maxLength={10}
+                              placeholder="98765 43210"
+                              value={phone}
+                              onChange={(e) =>
+                                setPhone(
+                                  e.target.value.replace(/\D/g, "").slice(0, 10),
+                                )
+                              }
+                              className="h-12 flex-1 rounded-xl bg-muted/30 border-border/50 tracking-wider"
+                            />
+                          </div>
+                          <p
+                            className={`mt-1.5 text-xs ${phone.length > 0 && !phoneValid
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                              }`}
+                          >
+                            {phone.length > 0 && !phoneValid
+                              ? "Enter a 10-digit Indian mobile starting with 6, 7, 8, or 9."
+                              : "10-digit mobile number, no spaces. We'll send a one-time code."}
+                          </p>
                         </div>
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          autoComplete="tel-national"
-                          maxLength={10}
-                          placeholder="98765 43210"
-                          value={phone}
-                          onChange={(e) =>
-                            setPhone(
-                              e.target.value.replace(/\D/g, "").slice(0, 10),
-                            )
-                          }
-                          className="h-12 flex-1 rounded-xl bg-muted/30 border-border/50 tracking-wider"
-                        />
-                      </div>
-                      <p
-                        className={`mt-1.5 text-xs ${
-                          phone.length > 0 && !phoneValid
-                            ? "text-destructive"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {phone.length > 0 && !phoneValid
-                          ? "Enter a 10-digit Indian mobile starting with 6, 7, 8, or 9."
-                          : "10-digit mobile number, no spaces. We'll send a one-time code."}
-                      </p>
-                    </div>
-                    <Button
-                      disabled={isPhoneAuthLoading || !phoneValid}
-                      className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                      onClick={handleSendOtp}
-                    >
-                      {isPhoneAuthLoading
-                        ? "Sending..."
-                        : "Verify Phone Number"}{" "}
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
+                        <Button
+                          disabled={isPhoneAuthLoading || !phoneValid}
+                          className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                          onClick={handleSendOtp}
+                        >
+                          {isPhoneAuthLoading
+                            ? "Sending..."
+                            : "Verify Phone Number"}{" "}
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                            Enter 6-digit OTP
+                          </label>
+                          <InputOTP
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={setOtpCode}
+                            className="gap-2"
+                          >
+                            <InputOTPGroup>
+                              <InputOTPSlot index={0} />
+                              <InputOTPSlot index={1} />
+                              <InputOTPSlot index={2} />
+                              <InputOTPSlot index={3} />
+                              <InputOTPSlot index={4} />
+                              <InputOTPSlot index={5} />
+                            </InputOTPGroup>
+                          </InputOTP>
+                        </div>
+                        <Button
+                          disabled={isPhoneAuthLoading || otpCode.length !== 6}
+                          className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                          onClick={handleVerifyOtp}
+                        >
+                          {isPhoneAuthLoading ? "Verifying..." : "Confirm OTP"}{" "}
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                        <div className="text-center mt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              reset();
+                              setOtpCode("");
+                            }}
+                            className="text-xs text-accent hover:underline font-medium"
+                          >
+                            Use a different number
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
-                ) : (
+                )}
+
+                {authMethod === "email" && (
                   <>
-                    <div>
-                      <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
-                        Enter 6-digit OTP
-                      </label>
-                      <InputOTP
-                        maxLength={6}
-                        value={otpCode}
-                        onChange={setOtpCode}
-                        className="gap-2"
-                      >
-                        <InputOTPGroup>
-                          <InputOTPSlot index={0} />
-                          <InputOTPSlot index={1} />
-                          <InputOTPSlot index={2} />
-                          <InputOTPSlot index={3} />
-                          <InputOTPSlot index={4} />
-                          <InputOTPSlot index={5} />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-                    <Button
-                      disabled={isPhoneAuthLoading || otpCode.length !== 6}
-                      className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                      onClick={handleVerifyOtp}
-                    >
-                      {isPhoneAuthLoading ? "Verifying..." : "Confirm OTP"}{" "}
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                    <div className="text-center mt-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          reset();
-                          setOtpCode("");
-                        }}
-                        className="text-xs text-accent hover:underline font-medium"
-                      >
-                        Use a different number
-                      </button>
-                    </div>
+                    {!emailOtpSent ? (
+                      <>
+                        <div>
+                          <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                            Email <span className="text-accent">*</span>
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                            <Input
+                              type="email"
+                              placeholder="rajesh@example.com"
+                              value={emailUser}
+                              onChange={(e) => setEmailUser(e.target.value)}
+                              autoComplete="email"
+                              className="pl-10 h-12 rounded-xl bg-muted/30 border-border/50"
+                            />
+                          </div>
+                          <p className="mt-1.5 text-xs text-muted-foreground">
+                            We'll send a 6-digit code to this address.
+                          </p>
+                        </div>
+                        <Button
+                          disabled={isEmailAuthLoading || !EMAIL_RE.test(emailUser)}
+                          className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0 mt-2"
+                          onClick={handleSendEmailOtp}
+                        >
+                          {isEmailAuthLoading
+                            ? "Sending..."
+                            : "Verify Email"}{" "}
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="text-[13px] font-semibold text-foreground mb-2.5 block">
+                            Enter 6-digit OTP
+                          </label>
+                          <p className="text-xs text-muted-foreground mb-2">Code sent to {emailUser}</p>
+                          <InputOTP
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={setOtpCode}
+                            className="gap-2"
+                          >
+                            <InputOTPGroup>
+                              <InputOTPSlot index={0} />
+                              <InputOTPSlot index={1} />
+                              <InputOTPSlot index={2} />
+                              <InputOTPSlot index={3} />
+                              <InputOTPSlot index={4} />
+                              <InputOTPSlot index={5} />
+                            </InputOTPGroup>
+                          </InputOTP>
+                        </div>
+                        <Button
+                          disabled={isEmailAuthLoading || otpCode.length !== 6}
+                          className="w-full h-12 gap-2 font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border-0 mt-4"
+                          onClick={handleVerifyEmailOtp}
+                        >
+                          {isEmailAuthLoading ? "Verifying..." : "Confirm OTP"}{" "}
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                        <div className="text-center mt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetEmail();
+                              setOtpCode("");
+                            }}
+                            className="text-xs text-accent hover:underline font-medium"
+                          >
+                            Use a different email
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -716,11 +945,10 @@ export default function SignupPage() {
                           variant="outline"
                           onClick={() => setOutletType(type)}
                           aria-pressed={selected}
-                          className={`h-11 rounded-xl text-xs font-medium capitalize ${
-                            selected
-                              ? "bg-primary/10 border-primary text-primary"
-                              : "bg-muted/30 border-border/50 hover:border-primary"
-                          }`}
+                          className={`h-11 rounded-xl text-xs font-medium capitalize ${selected
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "bg-muted/30 border-border/50 hover:border-primary"
+                            }`}
                         >
                           {type === "male"
                             ? "Men"
