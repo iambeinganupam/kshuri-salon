@@ -160,3 +160,43 @@ export async function verifyFirebaseToken(
   );
   return data.data;
 }
+
+/** POST /auth/request-email-otp */
+export async function requestEmailOtp(
+  client: AxiosInstance,
+  email: string
+) {
+  const { data } = await client.post<{ success: true; data: { message: string } }>(
+    '/auth/request-email-otp',
+    { email },
+  );
+  return data.data;
+}
+
+/** POST /auth/verify-email-otp */
+export async function verifyEmailOtp(
+  client: AxiosInstance,
+  payload: {
+    email: string;
+    otp_code: string;
+    role?: string;
+    first_name?: string;
+    last_name?: string;
+    business_name?: string;
+    legal_business_name?: string;
+    address_line1?: string;
+    city?: string;
+    postal_code?: string;
+    outlet_type?: 'unisex' | 'men' | 'women';
+    gstin?: string;
+    trade_license?: string;
+    is_signup?: boolean;
+    lookup_only?: boolean;
+  }
+) {
+  const { data } = await client.post<{ success: true; data: AuthTokenResponse }>(
+    '/auth/verify-email-otp',
+    payload,
+  );
+  return data.data;
+}

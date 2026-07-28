@@ -50,6 +50,7 @@ export {
   assertExpectedRole,
   isRoleMismatchError,
   isPhoneNotRegisteredError,
+  isEmailNotRegisteredError,
   ROLE_LABEL,
   ROLE_DASHBOARD_SLUG,
 } from './utils/roles';

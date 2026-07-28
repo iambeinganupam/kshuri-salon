@@ -169,3 +169,39 @@ export function useVerifyFirebaseToken() {
     },
   });
 }
+
+/** POST /auth/request-email-otp */
+export function useRequestEmailOtp() {
+  const client = useApiClient();
+  return useMutation({
+    mutationFn: (email: string) => authService.requestEmailOtp(client, email),
+  });
+}
+
+/** POST /auth/verify-email-otp */
+export function useVerifyEmailOtp() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      email: string;
+      otp_code: string;
+      role?: string;
+      first_name?: string;
+      last_name?: string;
+      business_name?: string;
+      legal_business_name?: string;
+      address_line1?: string;
+      city?: string;
+      postal_code?: string;
+      outlet_type?: 'unisex' | 'men' | 'women';
+      gstin?: string;
+      trade_license?: string;
+      is_signup?: boolean;
+      lookup_only?: boolean;
+    }) => authService.verifyEmailOtp(client, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(authKeys.profile(), data.user);
+    },
+  });
+}

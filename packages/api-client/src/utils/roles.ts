@@ -93,3 +93,10 @@ export function isPhoneNotRegisteredError(err: unknown): boolean {
   } | undefined;
   return e?.response?.data?.error?.code === 'AUTH_PHONE_NOT_REGISTERED';
 }
+
+export function isEmailNotRegisteredError(err: unknown): boolean {
+  const e = err as {
+    response?: { status?: number; data?: { error?: { code?: string } } };
+  } | undefined;
+  return e?.response?.data?.error?.code === 'AUTH_EMAIL_NOT_REGISTERED';
+}
