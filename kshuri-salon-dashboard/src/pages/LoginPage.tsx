@@ -134,6 +134,7 @@ export default function LoginPage() {
         navigate("/signup", {
           state: {
             email: emailUser,
+            otpCode: otpCode,
           },
         });
         return;
